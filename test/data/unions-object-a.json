@@ -4,7 +4,7 @@
   },
   "nullable": null,
   "records": {
-    "haskell.avro.example.Foo": {
+    "Foo": {
       "stuff": "stuff"
     }
   },
