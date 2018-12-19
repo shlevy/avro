@@ -64,6 +64,7 @@ import qualified Data.Aeson           as Aeson
 import           Data.ByteString.Lazy (ByteString)
 import           Data.HashMap.Strict  ((!))
 import qualified Data.HashMap.Strict  as HashMap
+import           Data.List            (intercalate)
 import           Data.List.NonEmpty   (NonEmpty (..))
 import qualified Data.List.NonEmpty   as NE
 import           Data.Tagged
@@ -98,13 +99,36 @@ decodeAvroJSON schema json =
           let
             branch =
               head (HashMap.keys obj)
-            names =
-              HashMap.fromList [(Schema.typeName t, t) | t <- NE.toList schemas]
-          in case HashMap.lookup branch names of
-            Just t  -> do
+
+            -- There are two ways for the type-tag of the JSON value to match
+            -- one of the schema union's branches.
+            -- (a) It can be explicitly namespaced, e.g. "ns.Foo",
+            --     and match the namespaced schema union type
+            -- (b) It can be unqualified, and when borrowing the
+            --     namespace of a potential match from the schema,
+            --     fully matches
+            branchMatches = flip NE.filter schemas $ \s ->
+              -- JSON value branch is fully namespace qualified
+              Schema.typeName s == branch
+              ||
+              -- JSON value branch is unqualified; decorate it
+              -- with the current schema namespace
+               (Text.all (/= '.') branch
+               && Schema.typeName s
+                  ==
+                  Schema.renderFullname (Schema.TN branch
+                                                   (Schema.typeNamespace s)))
+
+          in case branchMatches of
+            [t]  -> do
               nested <- parseAvroJSON union env t (obj ! branch)
               return (Avro.Union schemas t nested)
-            Nothing -> fail ("Type '" <> Text.unpack branch <> "' not in union: " <> show schemas)
+            [] -> fail ("Type '" <> Text.unpack branch <> "' not in union: " <> show schemas)
+            ts -> fail $
+                 "JSON representation encountered ambiguous types in schema. "
+                 <> Text.unpack branch
+                 <> " matches: "
+                 <> intercalate "," (show <$> ts)
     union Schema.Union{} _ =
       Avro.Error "Invalid JSON representation for union: has to be a JSON object with exactly one field."
     union _ _ =

@@ -42,6 +42,10 @@ module Data.Avro.Schema
 
   , overlay
   , subdefinition
+
+  , parseFullname
+  , typeBaseName
+  , typeNamespace
   ) where
 
 import           Control.Applicative
@@ -70,7 +74,7 @@ import           Data.Monoid                (First (..))
 import           Data.Semigroup
 import qualified Data.Set                   as S
 import           Data.String
-import           Data.Text                  (Text)
+import           Data.Text                  (Text, isInfixOf)
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         as T
 import qualified Data.Vector                as V
@@ -284,7 +288,49 @@ typeName bt =
     Map   _        -> "map"
     NamedType name -> renderFullname name
     Union (x:|_) _ -> typeName x
-    _              -> renderFullname $ name bt
+    Record {}      -> renderFullname $ name bt
+    Enum   {}      -> renderFullname $ name bt
+    Fixed  {}      -> renderFullname $ name bt
+
+-- |Get the basename of the type.  In the case of unions, get the basename of the
+-- first value in the union schema.
+typeBaseName :: Type -> Text
+typeBaseName bt = case bt of
+    Null           -> "null"
+    Boolean        -> "boolean"
+    Int            -> "int"
+    Long           -> "long"
+    Float          -> "float"
+    Double         -> "double"
+    Bytes          -> "bytes"
+    String         -> "string"
+    Array _        -> "array"
+    Map   _        -> "map"
+    NamedType name -> baseName name
+    Union (x:|_) _ -> typeBaseName x
+    Record {}       -> baseName $ name bt
+    Enum   {}       -> baseName $ name bt
+    Fixed  {}       -> baseName $ name bt
+
+-- |Get the namespace of the type.  In the case of unions, get the namespace
+-- of the first value in the union schema.
+typeNamespace :: Type -> [Text]
+typeNamespace bt = case bt of
+    Null           -> []
+    Boolean        -> []
+    Int            -> []
+    Long           -> []
+    Float          -> []
+    Double         -> []
+    Bytes          -> []
+    String         -> []
+    Array _        -> []
+    Map   _        -> []
+    NamedType name -> namespace name
+    Union (x:|_) _ -> typeNamespace x
+    Record {}       -> namespace $ name bt
+    Enum   {}       -> namespace $ name bt
+    Fixed  {}       -> namespace $ name bt
 
 data Field = Field { fldName    :: Text
                    , fldAliases :: [Text]
